@@ -1,4 +1,15 @@
-# Customer Purchase Prediction Model
+# 🛒 Customer Purchase Predictor
+
+[![Live Demo](https://img.shields.io/badge/demo-live-success)](https://futurexskill.github.io/deploy-model/)
+[![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-FF6F00?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/js)
+
+An AI-powered web application that predicts whether a customer will make a purchase based on their age and annual salary. Built with TensorFlow.js, it runs entirely in your browser without requiring any server or API.
+
+## 🚀 [**Try it Live**](https://futurexskill.github.io/deploy-model/)
+
+Visit: **https://futurexskill.github.io/deploy-model/**
+
+---
 
 This project builds a machine learning model to predict whether a customer will make a purchase based on their age and salary.
 

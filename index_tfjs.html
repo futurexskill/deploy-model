@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Purchase Prediction - TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .tech-badge {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            padding: 25px;
+            border-radius: 15px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-container.success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+        }
+
+        .result-container.warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+
+        .result-container.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+        }
+
+        .result-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon {
+            font-size: 28px;
+        }
+
+        .result-details {
+            margin-top: 15px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .confidence-bar {
+            margin-top: 15px;
+        }
+
+        .confidence-label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 25px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            transition: width 0.6s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .model-status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .model-status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .model-status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .model-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 Purchase Predictor</h1>
+        <p class="subtitle">AI-powered customer purchase prediction</p>
+        <div class="tech-badge">
+            <span class="badge">⚡ POWERED BY TENSORFLOW.JS</span>
+            <span class="badge">🧠 RUNS IN BROWSER</span>
+        </div>
+
+        <div id="modelStatus" class="model-status loading">
+            <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; display: inline-block; margin-right: 8px; vertical-align: middle;"></div>
+            Loading AI model...
+        </div>
+
+        <form id="predictionForm">
+            <div class="form-group">
+                <label for="age">Age</label>
+                <input 
+                    type="number" 
+                    id="age" 
+                    name="age" 
+                    min="18" 
+                    max="120" 
+                    required 
+                    placeholder="Enter age (18-120)"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="salary">Annual Salary ($)</label>
+                <input 
+                    type="number" 
+                    id="salary" 
+                    name="salary" 
+                    min="0" 
+                    step="1000" 
+                    required 
+                    placeholder="Enter annual salary"
+                >
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn" disabled>
+                Loading Model...
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px;">Analyzing...</p>
+        </div>
+
+        <div id="result" class="result-container">
+            <div class="result-title">
+                <span class="icon" id="resultIcon"></span>
+                <span id="resultLabel"></span>
+            </div>
+            
+            <div class="result-details">
+                <div class="detail-row">
+                    <span class="detail-label">Customer Age:</span>
+                    <span class="detail-value" id="displayAge"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Annual Salary:</span>
+                    <span class="detail-value" id="displaySalary"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Purchase Probability:</span>
+                    <span class="detail-value" id="displayProbability"></span>
+                </div>
+            </div>
+
+            <div class="confidence-bar">
+                <div class="confidence-label">Confidence Score</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="confidenceBar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let model = null;
+        let scalerParams = null;
+
+        // Scaler parameters (mean and scale from training)
+        // These will be loaded from scaler_params.json or embedded here
+        const SCALER_MEAN = [40.77, 54419.87]; // Default values
+        const SCALER_SCALE = [15.17, 22141.96];
+
+        const form = document.getElementById('predictionForm');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const submitBtn = document.getElementById('submitBtn');
+        const modelStatus = document.getElementById('modelStatus');
+
+        // Load the TensorFlow.js model
+        async function loadModel() {
+            try {
+                modelStatus.className = 'model-status loading';
+                modelStatus.innerHTML = '<div class="spinner" style="width: 20px; height: 20px; border-width: 2px; display: inline-block; margin-right: 8px; vertical-align: middle;"></div>Loading AI model...';
+                
+                // Try to load scaler parameters
+                try {
+                    const scalerResponse = await fetch('scaler_params.json');
+                    scalerParams = await scalerResponse.json();
+                    console.log('Scaler parameters loaded:', scalerParams);
+                } catch (e) {
+                    console.log('Using default scaler parameters');
+                    scalerParams = { mean: SCALER_MEAN, scale: SCALER_SCALE };
+                }
+
+                // Load the model
+                model = await tf.loadLayersModel('./tfjs_model/model.json');
+                console.log('Model loaded successfully!');
+                
+                modelStatus.className = 'model-status ready';
+                modelStatus.textContent = '✓ AI Model Ready';
+                
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Predict Purchase Likelihood';
+                
+            } catch (error) {
+                console.error('Error loading model:', error);
+                modelStatus.className = 'model-status error';
+                modelStatus.textContent = '✗ Failed to load model. Please ensure model files are present.';
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Model Load Failed';
+            }
+        }
+
+        // Standardize input features
+        function standardize(age, salary) {
+            const mean = scalerParams.mean;
+            const scale = scalerParams.scale;
+            
+            const ageScaled = (age - mean[0]) / scale[0];
+            const salaryScaled = (salary - mean[1]) / scale[1];
+            
+            return [ageScaled, salaryScaled];
+        }
+
+        // Make prediction
+        async function predict(age, salary) {
+            // Standardize inputs
+            const [ageScaled, salaryScaled] = standardize(age, salary);
+            
+            // Create tensor
+            const inputTensor = tf.tensor2d([[ageScaled, salaryScaled]]);
+            
+            // Make prediction
+            const prediction = model.predict(inputTensor);
+            const probabilities = await prediction.data();
+            
+            // Clean up tensors
+            inputTensor.dispose();
+            prediction.dispose();
+            
+            return {
+                notPurchase: probabilities[0],
+                purchase: probabilities[1],
+                willPurchase: probabilities[1] > probabilities[0]
+            };
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!model) {
+                alert('Model is not loaded yet. Please wait.');
+                return;
+            }
+            
+            const age = parseFloat(document.getElementById('age').value);
+            const salary = parseFloat(document.getElementById('salary').value);
+
+            // Hide previous results
+            resultDiv.style.display = 'none';
+            
+            // Show loading
+            loadingDiv.style.display = 'block';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Analyzing...';
+
+            try {
+                // Make prediction
+                const result = await predict(age, salary);
+                
+                // Hide loading
+                loadingDiv.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Predict Purchase Likelihood';
+
+                displayResult(age, salary, result);
+                
+            } catch (error) {
+                console.error('Prediction error:', error);
+                loadingDiv.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Predict Purchase Likelihood';
+                displayError('An error occurred during prediction.');
+            }
+        });
+
+        function displayResult(age, salary, prediction) {
+            // Update display values
+            document.getElementById('displayAge').textContent = `${age} years`;
+            document.getElementById('displaySalary').textContent = `$${salary.toLocaleString()}`;
+            document.getElementById('displayProbability').textContent = 
+                `${(prediction.purchase * 100).toFixed(1)}%`;
+
+            // Update result styling and icon
+            if (prediction.willPurchase) {
+                resultDiv.className = 'result-container success';
+                document.getElementById('resultIcon').textContent = '✓';
+                document.getElementById('resultLabel').textContent = 'Will Purchase';
+            } else {
+                resultDiv.className = 'result-container warning';
+                document.getElementById('resultIcon').textContent = '✗';
+                document.getElementById('resultLabel').textContent = 'Will Not Purchase';
+            }
+
+            // Update confidence bar
+            const confidenceBar = document.getElementById('confidenceBar');
+            const confidence = Math.max(prediction.purchase, prediction.notPurchase);
+            const confidencePercent = (confidence * 100).toFixed(1);
+            confidenceBar.style.width = `${confidencePercent}%`;
+            confidenceBar.textContent = `${confidencePercent}%`;
+
+            // Show result
+            resultDiv.style.display = 'block';
+        }
+
+        function displayError(message) {
+            resultDiv.className = 'result-container error';
+            resultDiv.innerHTML = `
+                <div class="result-title">
+                    <span class="icon">⚠</span>
+                    <span>Error</span>
+                </div>
+                <p style="margin-top: 15px; color: #721c24;">${message}</p>
+            `;
+            resultDiv.style.display = 'block';
+        }
+
+        // Load model on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadModel();
+        });
+    </script>
+</body>
+</html>

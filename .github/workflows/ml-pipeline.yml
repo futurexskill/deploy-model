@@ -1,0 +1,232 @@
+name: ML Model CI/CD Pipeline
+
+# Trigger workflow on push to main branch when Python or data files change
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.py'
+      - '**.csv'
+      - 'requirements.txt'
+      - '.github/workflows/ml-pipeline.yml'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  # Job 1: Train the ML Model
+  train-model:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout code from repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Python environment
+      - name: Set Up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'  # Cache pip dependencies for faster builds
+      
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install scikit-learn pandas numpy joblib pytest
+      
+      # Step 4: Train the ML model
+      - name: Train ML Model
+        run: |
+          echo "🚀 Starting model training..."
+          python train_model.py
+          echo "✅ Model training complete!"
+      
+      # Step 5: Upload trained model artifacts
+      - name: Upload Model Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-models
+          path: |
+            purchase_model.pkl
+            scaler.pkl
+          retention-days: 30
+
+  # Job 2: Validate and Test Model
+  test-model:
+    runs-on: ubuntu-latest
+    needs: train-model  # Run only after training completes
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Python
+      - name: Set Up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install scikit-learn pandas numpy joblib pytest
+      
+      # Step 4: Download trained model artifacts
+      - name: Download Model Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+      
+      # Step 5: Run model validation tests
+      - name: Run Model Validation Tests
+        run: |
+          echo "🧪 Running model validation tests..."
+          python tests/test_model.py
+          echo "✅ All tests passed!"
+      
+      # Step 6: Generate test report
+      - name: Generate Test Report
+        if: always()
+        run: |
+          echo "📊 Test Report Summary" > test-report.txt
+          echo "Model validation completed at $(date)" >> test-report.txt
+      
+      # Step 7: Upload test report
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-report.txt
+
+  # Job 3: Deploy to AWS Lambda
+  deploy-to-aws:
+    runs-on: ubuntu-latest
+    needs: test-model  # Deploy only if tests pass
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Download trained model artifacts
+      - name: Download Model Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+      
+      # Step 3: Configure AWS credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      # Step 4: Upload models to S3
+      - name: Upload Models to S3
+        run: |
+          echo "📦 Uploading models to S3..."
+          aws s3 cp purchase_model.pkl s3://customer-purchase-predictor-models/purchase_model.pkl
+          aws s3 cp scaler.pkl s3://customer-purchase-predictor-models/scaler.pkl
+          echo "✅ Models uploaded to S3 successfully!"
+      
+      # Step 5: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      # Step 6: Build and push Docker image to ECR
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: customer-purchase-predictor
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🐳 Building Docker image..."
+          cd docker-lambda
+          cp ../purchase_model.pkl .
+          cp ../scaler.pkl .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          echo "📤 Pushing image to ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "✅ Docker image pushed successfully!"
+      
+      # Step 7: Update Lambda function
+      - name: Update Lambda Function
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: customer-purchase-predictor
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🚀 Updating Lambda function..."
+          aws lambda update-function-code \
+            --function-name customer-purchase-predictor \
+            --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          
+          echo "⏳ Waiting for Lambda function to update..."
+          aws lambda wait function-updated \
+            --function-name customer-purchase-predictor
+          
+          echo "✅ Lambda function updated successfully!"
+      
+      # Step 8: Test deployed Lambda function
+      - name: Test Lambda Function
+        run: |
+          echo "🧪 Testing deployed Lambda function..."
+          
+          # Invoke Lambda function
+          aws lambda invoke \
+            --function-name customer-purchase-predictor \
+            --payload '{"body": "{\"age\": 35, \"salary\": 70000}"}' \
+            response.json
+          
+          # Check response
+          cat response.json
+          
+          # Verify response contains expected fields
+          if grep -q "will_purchase" response.json && grep -q "confidence" response.json; then
+            echo "✅ Lambda function test passed!"
+          else
+            echo "❌ Lambda function test failed!"
+            exit 1
+          fi
+      
+      # Step 9: Create deployment tag
+      - name: Create Deployment Tag
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          TAG_NAME="deployment-$TIMESTAMP"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a $TAG_NAME -m "Automated deployment at $TIMESTAMP"
+          git push origin $TAG_NAME || echo "Tag already exists or push failed"
+      
+      # Step 10: Deployment summary
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "🎉 =================================="
+          echo "🎉 DEPLOYMENT SUCCESSFUL!"
+          echo "🎉 =================================="
+          echo ""
+          echo "✅ Model trained and validated"
+          echo "✅ Models uploaded to S3"
+          echo "✅ Docker image built and pushed to ECR"
+          echo "✅ Lambda function updated"
+          echo "✅ Lambda function tested"
+          echo ""
+          echo "📊 Deployment Details:"
+          echo "  - Commit SHA: ${{ github.sha }}"
+          echo "  - Deployed at: $(date)"
+          echo "  - Lambda Function: customer-purchase-predictor"
+          echo "  - Region: us-east-1"
+          echo ""
+          echo "🔗 API Endpoint: https://2y2wvahuza.execute-api.us-east-1.amazonaws.com"
